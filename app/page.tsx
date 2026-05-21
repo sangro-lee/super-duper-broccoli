@@ -16,6 +16,31 @@ function money(n) {
   return Number(n || 0).toLocaleString("ko-KR") + "원";
 }
 
+function normalizeTextArray(value) {
+  if (Array.isArray(value)) {
+    return value.filter((item) => typeof item === "string");
+  }
+
+  if (typeof value === "string") {
+    try {
+      const parsed = JSON.parse(value);
+      return Array.isArray(parsed) ? parsed.filter((item) => typeof item === "string") : [];
+    } catch {
+      return value ? [value] : [];
+    }
+  }
+
+  return [];
+}
+
+function formatRecordDate(value) {
+  if (typeof value === "string" && value.length >= 10) {
+    return value.slice(0, 10);
+  }
+
+  return todayString();
+}
+
 function shuffleArray(arr) {
   const copy = [...arr];
   for (let i = copy.length - 1; i > 0; i--) {
@@ -74,42 +99,50 @@ export default function CoffeeBetLadderApp() {
   // 데이터 불러오기
   const fetchData = useCallback(async () => {
     setLoading(true);
+    try {
+      // 참여자 목록 가져오기
+      const { data: peopleData, error: peopleError } = await supabase
+        .from("people")
+        .select("*")
+        .order("created_at", { ascending: true });
 
-    // 참여자 목록 가져오기
-    const { data: peopleData, error: peopleError } = await supabase
-      .from("people")
-      .select("*")
-      .order("created_at", { ascending: true });
+      // 기록 가져오기
+      const { data: recordsData, error: recordsError } = await supabase
+        .from("coffee_records")
+        .select("*")
+        .order("created_at", { ascending: false });
 
-    // 기록 가져오기
-    // participants, coupons_used, coupon_earned 컬럼이 coffee_records에 있어야 쿠폰 사용 이력이 저장됩니다.
-    const { data: recordsData, error: recordsError } = await supabase
-      .from("coffee_records")
-      .select("*")
-      .order("created_at", { ascending: false });
+      if (peopleError) console.error("people fetch error:", peopleError);
+      if (recordsError) console.error("records fetch error:", recordsError);
 
-    if (peopleError) console.error("people fetch error:", peopleError);
-    if (recordsError) console.error("records fetch error:", recordsError);
+      if (peopleData) {
+        setPeople(peopleData.map((p) => p.name).filter(Boolean));
+      }
 
-    if (peopleData) {
-      setPeople(peopleData.map((p) => p.name));
+      if (recordsData) {
+        const recordsWithCoupons = recordsData.map((r, index) => ({
+          id: r.id || `record-${index}`,
+          date: formatRecordDate(r.created_at),
+          gameType: r.game_type || "기록",
+          loser: r.loser || "알 수 없음",
+          amount: Number(r.amount || 0),
+          participants: normalizeTextArray(r.participants),
+          couponsUsed: normalizeTextArray(r.coupons_used),
+          couponEarned: !!r.coupon_earned,
+        }));
+        setRecords(recordsWithCoupons);
+      }
+    } catch (error) {
+      console.error("fetchData parse error:", error);
+      toast({
+        title: "데이터 불러오기 실패",
+        description: error instanceof Error ? error.message : "레코드 형식이 올바르지 않습니다.",
+        variant: "destructive",
+      });
+      setRecords([]);
+    } finally {
+      setLoading(false);
     }
-
-    if (recordsData) {
-      const recordsWithCoupons = recordsData.map((r) => ({
-        id: r.id,
-        date: r.created_at.slice(0, 10),
-        gameType: r.game_type,
-        loser: r.loser,
-        amount: r.amount,
-        participants: r.participants || [],
-        couponsUsed: r.coupons_used || [],
-        couponEarned: !!r.coupon_earned,
-      }));
-      setRecords(recordsWithCoupons);
-    }
-
-    setLoading(false);
   }, [supabase]);
 
   useEffect(() => {
