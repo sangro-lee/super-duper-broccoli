@@ -5,6 +5,7 @@ import { motion } from "framer-motion";
 import { Coffee, Plus, Trash2, Ticket, BarChart3, RotateCcw, Save, Shuffle, ExternalLink, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { toast } from "@/hooks/use-toast";
 import { createClient } from "@/lib/supabase/client";
 
 function todayString() {
@@ -65,9 +66,10 @@ export default function CoffeeBetLadderApp() {
   const [finalCol, setFinalCol] = useState(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [personSaving, setPersonSaving] = useState(false);
   const canvasRef = useRef(null);
   
-  const supabase = createClient();
+  const supabase = useMemo(() => createClient(), []);
 
   // 데이터 불러오기
   const fetchData = useCallback(async () => {
@@ -151,16 +153,44 @@ export default function CoffeeBetLadderApp() {
 
   const addPerson = async () => {
     const name = newPerson.trim();
-    if (!name || people.includes(name)) return;
-    
+    if (!name) {
+      toast({
+        title: "이름을 입력하세요.",
+      });
+      return;
+    }
+
+    if (people.includes(name)) {
+      toast({
+        title: "이미 등록된 인원입니다.",
+        description: `${name} 은(는) 이미 목록에 있습니다.`,
+      });
+      return;
+    }
+
+    setPersonSaving(true);
+
     const { error } = await supabase
       .from("people")
-      .insert({ name });
-    
-    if (!error) {
-      setPeople([...people, name]);
+      .insert([{ name }]);
+
+    if (error) {
+      console.error("people insert error:", error);
+      toast({
+        title: "인원 추가 실패",
+        description: error.message,
+        variant: "destructive",
+      });
+    } else {
+      setPeople((prev) => [...prev, name]);
       setNewPerson("");
+      toast({
+        title: "인원을 추가했습니다.",
+        description: name,
+      });
     }
+
+    setPersonSaving(false);
   };
 
   const removePerson = async (name) => {
@@ -168,9 +198,16 @@ export default function CoffeeBetLadderApp() {
       .from("people")
       .delete()
       .eq("name", name);
-    
-    if (!error) {
-      setPeople(people.filter((p) => p !== name));
+
+    if (error) {
+      console.error("people delete error:", error);
+      toast({
+        title: "인원 삭제 실패",
+        description: error.message,
+        variant: "destructive",
+      });
+    } else {
+      setPeople((prev) => prev.filter((p) => p !== name));
     }
   };
 
@@ -395,10 +432,18 @@ export default function CoffeeBetLadderApp() {
             <Card className="rounded-3xl shadow-sm">
               <CardContent className="p-5">
                 <h2 className="mb-4 flex items-center gap-2 text-xl font-semibold"><Plus className="h-5 w-5" /> 인원 관리</h2>
-                <div className="flex gap-2">
-                  <input value={newPerson} onChange={(e) => setNewPerson(e.target.value)} onKeyDown={(e) => e.key === "Enter" && !e.nativeEvent.isComposing && addPerson()} placeholder="이름 입력" className="min-w-0 flex-1 rounded-2xl border px-3 py-2 outline-none focus:ring-2 focus:ring-neutral-300" />
-                  <Button onClick={addPerson} className="rounded-2xl">추가</Button>
-                </div>
+                <form
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    addPerson();
+                  }}
+                  className="flex gap-2"
+                >
+                  <input value={newPerson} onChange={(e) => setNewPerson(e.target.value)} placeholder="이름 입력" className="min-w-0 flex-1 rounded-2xl border px-3 py-2 outline-none focus:ring-2 focus:ring-neutral-300" />
+                  <Button type="submit" disabled={personSaving} className="rounded-2xl">
+                    {personSaving ? "추가 중..." : "추가"}
+                  </Button>
+                </form>
                 <div className="mt-4 space-y-2">
                   {people.map((p) => (
                     <div key={p} className="flex items-center justify-between rounded-2xl bg-neutral-100 px-3 py-2">
