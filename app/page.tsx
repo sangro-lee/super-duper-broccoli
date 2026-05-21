@@ -92,6 +92,7 @@ export default function CoffeeBetLadderApp() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [personSaving, setPersonSaving] = useState(false);
+  const [manualPickOpen, setManualPickOpen] = useState(false);
   const canvasRef = useRef(null);
   
   const supabase = useMemo(() => createClient(), []);
@@ -247,6 +248,7 @@ export default function CoffeeBetLadderApp() {
   const runGame = () => {
     if (activePeople.length < 2) return;
     setIsRunning(true);
+    setManualPickOpen(false);
     setResult(null);
     setHighlightPath([]);
     setLadderReady(false);
@@ -274,6 +276,16 @@ export default function CoffeeBetLadderApp() {
         setIsRunning(false);
       }, 500);
     }
+  };
+
+  const selectManualLoser = (name) => {
+    setManualPickOpen(false);
+    setLadderReady(false);
+    setSelectedPerson(null);
+    setFinalCol(null);
+    setHighlightPath([]);
+    setLadder(null);
+    setResult({ loser: name, type: "수동 기록" });
   };
 
   const handlePersonClick = (personIndex) => {
@@ -349,6 +361,7 @@ export default function CoffeeBetLadderApp() {
       alert("저장 실패: Supabase의 coffee_records 테이블에 participants, coupons_used, coupon_earned 컬럼이 있는지 확인하세요.");
     } else {
       await fetchData();
+      setManualPickOpen(false);
       setResult(null);
       setCouponUse({});
     }
@@ -367,6 +380,27 @@ export default function CoffeeBetLadderApp() {
     if (!error) {
       setRecords([]);
     }
+  };
+
+  const deleteRecord = async (id) => {
+    if (!confirm("이 기록을 삭제하시겠습니까?")) return;
+
+    const { error } = await supabase
+      .from("coffee_records")
+      .delete()
+      .eq("id", id);
+
+    if (error) {
+      console.error("record delete error:", error);
+      toast({
+        title: "기록 삭제 실패",
+        description: error.message,
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setRecords((prev) => prev.filter((record) => record.id !== id));
   };
 
   const drawLadder = () => {
@@ -523,6 +557,31 @@ export default function CoffeeBetLadderApp() {
                 <Button disabled={activePeople.length < 2 || isRunning} onClick={runGame} className="mt-5 w-full rounded-2xl py-6 text-base">
                   <Shuffle className="mr-2 h-5 w-5" /> 내기 시작
                 </Button>
+                <Button
+                  variant="outline"
+                  disabled={activePeople.length < 1 || isRunning}
+                  onClick={() => setManualPickOpen((prev) => !prev)}
+                  className="mt-3 w-full rounded-2xl"
+                >
+                  다른 내기 결과 직접 기록
+                </Button>
+                {manualPickOpen && (
+                  <div className="mt-3 space-y-2 rounded-2xl border bg-neutral-50 p-3">
+                    <div className="text-sm font-medium">누가 걸렸는지 선택</div>
+                    <div className="flex flex-wrap gap-2">
+                      {activePeople.map((p) => (
+                        <Button
+                          key={p}
+                          variant="secondary"
+                          onClick={() => selectManualLoser(p)}
+                          className="rounded-2xl"
+                        >
+                          {p}
+                        </Button>
+                      ))}
+                    </div>
+                  </div>
+                )}
                 <div className="mt-2 text-center text-xs text-neutral-500">실제 게임 참가자: {activePeople.length}명</div>
               </CardContent>
             </Card>
@@ -653,7 +712,16 @@ export default function CoffeeBetLadderApp() {
                     <div key={r.id} className="rounded-2xl border bg-white p-4">
                       <div className="flex flex-wrap items-center justify-between gap-2">
                         <div className="font-semibold">{r.date} · {r.loser} 당첨</div>
-                        <div className="text-sm text-neutral-500">{r.gameType} · {money(r.amount)}</div>
+                        <div className="flex items-center gap-2">
+                          <div className="text-sm text-neutral-500">{r.gameType} · {money(r.amount)}</div>
+                          <button
+                            onClick={() => deleteRecord(r.id)}
+                            className="rounded-xl p-2 text-neutral-500 hover:bg-neutral-100 hover:text-neutral-900"
+                            aria-label="기록 삭제"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        </div>
                       </div>
                       {!!r.participants?.length && (
                         <div className="mt-2 text-sm text-neutral-600">참여: {r.participants.join(", ")}</div>
