@@ -369,19 +369,6 @@ export default function CoffeeBetLadderApp() {
     setSaving(false);
   };
 
-  const deleteAllRecords = async () => {
-    if (!confirm("정말 모든 기록을 삭제하시겠습니까?")) return;
-    
-    const { error } = await supabase
-      .from("coffee_records")
-      .delete()
-      .neq("id", "00000000-0000-0000-0000-000000000000"); // 모든 레코드 삭제
-    
-    if (!error) {
-      setRecords([]);
-    }
-  };
-
   const deleteRecord = async (id) => {
     if (!confirm("이 기록을 삭제하시겠습니까?")) return;
 
@@ -704,7 +691,6 @@ export default function CoffeeBetLadderApp() {
               <CardContent className="p-5">
                 <div className="mb-4 flex items-center justify-between">
                   <h2 className="text-xl font-semibold">기록</h2>
-                  <Button variant="outline" className="rounded-2xl" onClick={deleteAllRecords}>전체 삭제</Button>
                 </div>
                 <div className="space-y-2">
                   {records.length === 0 && <div className="rounded-2xl bg-neutral-100 p-4 text-sm text-neutral-500">아직 저장된 기록이 없습니다.</div>}
